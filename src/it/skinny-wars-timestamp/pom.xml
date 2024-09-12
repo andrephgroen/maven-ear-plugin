@@ -30,8 +30,8 @@ under the License.
   <description>Test Skinny WAR generation</description>
 
   <modules>
-      <module>ear-module</module>
-      <module>war-module</module>
+    <module>ear-module</module>
+    <module>war-module-one</module>
+    <module>war-module-two</module>
   </modules>
-  
 </project>

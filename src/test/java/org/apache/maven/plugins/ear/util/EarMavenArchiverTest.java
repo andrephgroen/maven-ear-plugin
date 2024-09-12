@@ -8,7 +8,6 @@ import java.util.List;
 import org.apache.maven.plugins.ear.AbstractEarTestBase;
 import org.apache.maven.plugins.ear.EarModule;
 import org.apache.maven.plugins.ear.EjbModule;
-import org.apache.maven.plugins.ear.util.EarMavenArchiver;
 import org.junit.Test;
 
 /*
@@ -37,10 +36,11 @@ public class EarMavenArchiverTest
     extends AbstractEarTestBase
 {
 
+    private List<EarModule> modules = new ArrayList<>();
+
     @Test
     public void testSimpleEjbModule()
     {
-        final List<EarModule> modules = new ArrayList<EarModule>();
         final EarModule module = new EjbModule( createArtifact( "foo", "ejb" ) );
         setUri( module, "foo-1.0.jar" );
         modules.add( module );
@@ -53,7 +53,6 @@ public class EarMavenArchiverTest
     @Test
     public void testSimpleJarModuleWithCustomBundleDir()
     {
-        final List<EarModule> modules = new ArrayList<EarModule>();
         final EarModule module = new EjbModule( createArtifact( "foo", "jar" ) );
         setUri( module, "libs/foo-1.0.jar" );
         modules.add( module );
@@ -66,7 +65,6 @@ public class EarMavenArchiverTest
     @Test
     public void testTwoModules()
     {
-        final List<EarModule> modules = new ArrayList<EarModule>();
         final EarModule module = new EjbModule( createArtifact( "foo", "ejb" ) );
         setUri( module, "foo-1.0.jar" );
         modules.add( module );

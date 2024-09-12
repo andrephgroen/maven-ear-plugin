@@ -19,17 +19,34 @@ package org.apache.maven.plugins.ear;
  * under the License.
  */
 
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.ProviderMismatchException;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
-import java.util.zip.ZipException;
+import java.util.Objects;
 
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
+import org.apache.maven.artifact.Artifact;
+import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -41,22 +58,25 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.plugins.ear.util.EarMavenArchiver;
 import org.apache.maven.plugins.ear.util.JavaEEVersion;
 import org.apache.maven.project.MavenProjectHelper;
+import org.apache.maven.shared.filtering.FilterWrapper;
 import org.apache.maven.shared.filtering.MavenFileFilter;
 import org.apache.maven.shared.filtering.MavenFilteringException;
 import org.apache.maven.shared.filtering.MavenResourcesExecution;
 import org.apache.maven.shared.filtering.MavenResourcesFiltering;
+import org.apache.maven.shared.mapping.MappingUtils;
 import org.apache.maven.shared.utils.io.FileUtils;
 import org.codehaus.plexus.archiver.Archiver;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.UnArchiver;
+import org.codehaus.plexus.archiver.ear.EarArchiver;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
 import org.codehaus.plexus.archiver.jar.Manifest;
 import org.codehaus.plexus.archiver.jar.Manifest.Attribute;
 import org.codehaus.plexus.archiver.jar.ManifestException;
 import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.archiver.manager.NoSuchArchiverException;
-import org.codehaus.plexus.archiver.zip.ZipArchiver;
-import org.codehaus.plexus.archiver.zip.ZipUnArchiver;
+import org.codehaus.plexus.components.io.filemappers.FileMapper;
+import org.codehaus.plexus.interpolation.InterpolationException;
 import org.codehaus.plexus.util.DirectoryScanner;
 import org.codehaus.plexus.util.StringUtils;
 
@@ -65,12 +85,19 @@ import org.codehaus.plexus.util.StringUtils;
  * 
  * @author <a href="snicoll@apache.org">Stephane Nicoll</a>
  */
-// CHECKSTYLE_OFF: LineLength
-@Mojo( name = "ear", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.TEST )
-// CHECKSTYLE_ON: LineLength
+@Mojo( name = "ear",
+       defaultPhase = LifecyclePhase.PACKAGE,
+       threadSafe = true,
+       requiresDependencyResolution = ResolutionScope.TEST )
 public class EarMojo
     extends AbstractEarMojo
 {
+    /**
+     * Default file name mapping used by artifacts located in local repository.
+     */
+    private static final String ARTIFACT_DEFAULT_FILE_NAME_MAPPING =
+        "@{artifactId}@-@{version}@@{dashClassifier?}@.@{extension}@";
+
     /**
      * Single directory for extra files to include in the EAR.
      */
@@ -143,7 +170,7 @@ public class EarMojo
      * The location of a custom application.xml file to be used within the EAR file.
      */
     @Parameter
-    private String applicationXml;
+    private File applicationXml;
 
     /**
      * The directory for the generated EAR.
@@ -199,29 +226,45 @@ public class EarMojo
     private boolean skinnyWars;
 
     /**
-     * The Jar archiver.
+     * Whether to create skinny EAR modules or not. A skinny EAR module is a WAR, SAR, HAR, RAR or WSR module that
+     * does not contain all of its dependencies in it. Instead those dependencies are shared between the WARs, SARs,
+     * HARs, RARs and WSRs through the EAR. This option takes precedence over {@link #skinnyWars} option. That is if
+     * skinnyModules is {@code true} but {@link #skinnyWars} is {@code false} (explicitly or by default) then all
+     * modules including WARs are skinny.
+     *
+     * @since 3.2.0
+     */
+    @Parameter( defaultValue = "false" )
+    private boolean skinnyModules;
+
+    /**
+     * The Plexus EAR archiver to create the output archive.
+     */
+    @Component( role = Archiver.class, hint = "ear" )
+    private EarArchiver earArchiver;
+
+    /**
+     * The Plexus JAR archiver to create the output archive if not EAR application descriptor is provided (JavaEE 5+).
      */
     @Component( role = Archiver.class, hint = "jar" )
     private JarArchiver jarArchiver;
 
     /**
-     * The Zip archiver.
-     */
-    @Component( role = Archiver.class, hint = "zip" )
-    private ZipArchiver zipArchiver;
-
-    /**
-     * The Zip Un archiver.
-     */
-    @Component( role = UnArchiver.class, hint = "zip" )
-    private ZipUnArchiver zipUnArchiver;
-
-    /**
-     * The archive configuration to use. See <a href="http://maven.apache.org/shared/maven-archiver/index.html">Maven
-     * Archiver Reference</a>.
+     * The archive configuration to use. See <a href="https://maven.apache.org/shared/maven-archiver/">Maven Archiver
+     * Reference</a>.
      */
     @Parameter
     private MavenArchiveConfiguration archive = new MavenArchiveConfiguration();
+
+    /**
+     * Timestamp for reproducible output archive entries, either formatted as ISO 8601
+     * <code>yyyy-MM-dd'T'HH:mm:ssXXX</code> or as an int representing seconds since the epoch (like
+     * <a href="https://reproducible-builds.org/docs/source-date-epoch/">SOURCE_DATE_EPOCH</a>).
+     *
+     * @since 3.1.0
+     */
+    @Parameter( defaultValue = "${project.build.outputTimestamp}" )
+    private String outputTimestamp;
 
     /**
      */
@@ -250,13 +293,7 @@ public class EarMojo
     @Parameter( defaultValue = "${session}", readonly = true, required = true )
     private MavenSession session;
 
-    private List<FileUtils.FilterWrapper> filterWrappers;
-
-    /**
-     * @since 2.9
-     */
-    @Parameter( defaultValue = "true" )
-    private boolean useJvmChmod = true;
+    private List<FilterWrapper> filterWrappers;
 
     /** {@inheritDoc} */
     public void execute()
@@ -265,21 +302,45 @@ public class EarMojo
         // Initializes ear modules
         super.execute();
 
-        zipArchiver.setUseJvmChmod( useJvmChmod );
-        zipUnArchiver.setUseJvmChmod( useJvmChmod );
+        File earFile = getEarFile( outputDirectory, finalName, classifier );
+        MavenArchiver archiver = new EarMavenArchiver( getModules() );
+        File ddFile = new File( getWorkDirectory(), APPLICATION_XML_URI );
+
+        JarArchiver theArchiver;
+        if ( ddFile.exists() )
+        {
+            earArchiver.setAppxml( ddFile );
+            theArchiver = earArchiver;
+        }
+        else
+        {
+            // current Plexus EarArchiver does not support application.xml-less JavaEE 5+ case
+            // => fallback to Plexus Jar archiver 
+            theArchiver = jarArchiver;
+        }
+        getLog().debug( "Ear archiver implementation [" + theArchiver.getClass().getName() + "]" );
+        archiver.setArchiver( theArchiver );
+        archiver.setOutputFile( earFile );
+        archiver.setCreatedBy( "Maven EAR Plugin", "org.apache.maven.plugins", "maven-ear-plugin" );
+
+        // configure for Reproducible Builds based on outputTimestamp value
+        archiver.configureReproducibleBuild( outputTimestamp );
 
         final JavaEEVersion javaEEVersion = JavaEEVersion.getJavaEEVersion( version );
+
+        final Collection<String> outdatedResources = initOutdatedResources();
 
         // Initializes unpack types
         List<String> unpackTypesList = createUnpackList();
 
         // Copy modules
-        copyModules( javaEEVersion, unpackTypesList );
+        copyModules( javaEEVersion, unpackTypesList, outdatedResources );
 
         // Copy source files
         try
         {
             File earSourceDir = earSourceDirectory;
+
             if ( earSourceDir.exists() )
             {
                 getLog().info( "Copy ear sources to " + getWorkDirectory().getAbsolutePath() );
@@ -287,17 +348,18 @@ public class EarMojo
                 for ( String fileName : fileNames )
                 {
                     copyFile( new File( earSourceDir, fileName ), new File( getWorkDirectory(), fileName ) );
+                    outdatedResources.remove( Paths.get( fileName ).toString() );
                 }
             }
 
-            if ( applicationXml != null && !"".equals( applicationXml ) )
+            if ( applicationXml != null )
             {
                 // rename to application.xml
                 getLog().info( "Including custom application.xml[" + applicationXml + "]" );
                 File metaInfDir = new File( getWorkDirectory(), META_INF );
-                copyFile( new File( applicationXml ), new File( metaInfDir, "/application.xml" ) );
+                copyFile( applicationXml, new File( metaInfDir, "/application.xml" ) );
+                outdatedResources.remove( Paths.get( "META-INF/application.xml" ).toString() );
             }
-
         }
         catch ( IOException e )
         {
@@ -309,46 +371,47 @@ public class EarMojo
         }
 
         // Check if deployment descriptor is there
-        File ddFile = new File( getWorkDirectory(), APPLICATION_XML_URI );
         if ( !ddFile.exists() && ( javaEEVersion.lt( JavaEEVersion.FIVE ) ) )
         {
-            // CHECKSTYLE_OFF: LineLength
             throw new MojoExecutionException( "Deployment descriptor: " + ddFile.getAbsolutePath()
                 + " does not exist." );
-            // CHECKSTYLE_ON: LineLength
         }
+        // no need to check timestamp for descriptors: removing if outdated does not really make sense
+        outdatedResources.remove( Paths.get( APPLICATION_XML_URI ).toString() );
+        if ( getJbossConfiguration() != null )
+        {
+            outdatedResources.remove( Paths.get( "META-INF/jboss-app.xml" ).toString() );
+        }
+
+        deleteOutdatedResources( outdatedResources );
 
         try
         {
-            File earFile = getEarFile( outputDirectory, finalName, classifier );
-            final MavenArchiver archiver = new EarMavenArchiver( getModules() );
-            final JarArchiver theJarArchiver = getJarArchiver();
-            getLog().debug( "Jar archiver implementation [" + theJarArchiver.getClass().getName() + "]" );
-            archiver.setArchiver( theJarArchiver );
-            archiver.setOutputFile( earFile );
-
             getLog().debug( "Excluding " + Arrays.asList( getPackagingExcludes() ) + " from the generated EAR." );
             getLog().debug( "Including " + Arrays.asList( getPackagingIncludes() ) + " in the generated EAR." );
 
             archiver.getArchiver().addDirectory( getWorkDirectory(), getPackagingIncludes(), getPackagingExcludes() );
-            archiver.createArchive( session, getProject(), archive );
 
-            if ( classifier != null )
-            {
-                projectHelper.attachArtifact( getProject(), "ear", classifier, earFile );
-            }
-            else
-            {
-                getProject().getArtifact().setFile( earFile );
-            }
+            archiver.createArchive( session, getProject(), archive );
         }
-        catch ( Exception e )
+        catch ( ManifestException | IOException | DependencyResolutionRequiredException e )
         {
             throw new MojoExecutionException( "Error assembling EAR", e );
         }
+
+        if ( classifier != null )
+        {
+            projectHelper.attachArtifact( getProject(), "ear", classifier, earFile );
+        }
+        else
+        {
+            getProject().getArtifact().setFile( earFile );
+        }
     }
 
-    private void copyModules( final JavaEEVersion javaEEVersion, List<String> unpackTypesList )
+    private void copyModules( final JavaEEVersion javaEEVersion, 
+                              List<String> unpackTypesList, 
+                              Collection<String> outdatedResources )
         throws MojoExecutionException, MojoFailureException
     {
         try
@@ -373,20 +436,21 @@ public class EarMojo
 
                 // If the module is within the unpack list, make sure that no unpack wasn't forced (null or true)
                 // If the module is not in the unpack list, it should be true
-                // CHECKSTYLE_OFF: LineLength
                 if ( ( unpackTypesList.contains( module.getType() )
                     && ( module.shouldUnpack() == null || module.shouldUnpack() ) )
                     || ( module.shouldUnpack() != null && module.shouldUnpack() ) )
-                // CHECKSTYLE_ON: LineLength
                 {
                     getLog().info( "Copying artifact [" + module + "] to [" + module.getUri() + "] (unpacked)" );
                     // Make sure that the destination is a directory to avoid plexus nasty stuff :)
-                    destinationFile.mkdirs();
-                    unpack( sourceFile, destinationFile );
-
-                    if ( skinnyWars && module.changeManifestClasspath() )
+                    if ( !destinationFile.isDirectory() && !destinationFile.mkdirs() )
                     {
-                        changeManifestClasspath( module, destinationFile, javaEEVersion );
+                        throw new MojoExecutionException( "Error creating " + destinationFile );
+                    }
+                    unpack( sourceFile, destinationFile, outdatedResources );
+
+                    if ( module.changeManifestClasspath() )
+                    {
+                        changeManifestClasspath( module, destinationFile, javaEEVersion, outdatedResources );
                     }
                 }
                 else
@@ -394,11 +458,12 @@ public class EarMojo
                     if ( sourceFile.lastModified() > destinationFile.lastModified() )
                     {
                         getLog().info( "Copying artifact [" + module + "] to [" + module.getUri() + "]" );
-                        FileUtils.copyFile( sourceFile, destinationFile );
-
-                        if ( skinnyWars && module.changeManifestClasspath() )
+                        createParentIfNecessary( destinationFile );
+                        Files.copy( sourceFile.toPath(), destinationFile.toPath(),
+                            LinkOption.NOFOLLOW_LINKS, StandardCopyOption.REPLACE_EXISTING );
+                        if ( module.changeManifestClasspath() )
                         {
-                            changeManifestClasspath( module, destinationFile, javaEEVersion );
+                            changeManifestClasspath( module, destinationFile, javaEEVersion, outdatedResources );
                         }
                     }
                     else
@@ -406,6 +471,7 @@ public class EarMojo
                         getLog().debug( "Skipping artifact [" + module + "], as it is already up to date at ["
                             + module.getUri() + "]" );
                     }
+                    removeFromOutdatedResources( destinationFile.toPath(), outdatedResources );
                 }
             }
         }
@@ -426,16 +492,16 @@ public class EarMojo
     private List<String> createUnpackList()
         throws MojoExecutionException
     {
-        List<String> unpackTypesList = new ArrayList<String>();
+        List<String> unpackTypesList = new ArrayList<>();
         if ( unpackTypes != null )
         {
             unpackTypesList = Arrays.asList( unpackTypes.split( "," ) );
             for ( String type : unpackTypesList )
             {
-                if ( !EarModuleFactory.STANDARD_ARTIFACT_TYPE.contains( type ) )
+                if ( !EarModuleFactory.isStandardArtifactType( type ) )
                 {
                     throw new MojoExecutionException( "Invalid type [" + type + "] supported types are "
-                        + EarModuleFactory.STANDARD_ARTIFACT_TYPE );
+                        + EarModuleFactory.getStandardArtifactTypes() );
                 }
             }
             getLog().debug( "Initialized unpack types " + unpackTypesList );
@@ -446,7 +512,7 @@ public class EarMojo
     /**
      * @return {@link #applicationXml}
      */
-    public String getApplicationXml()
+    public File getApplicationXml()
     {
         return applicationXml;
     }
@@ -454,7 +520,7 @@ public class EarMojo
     /**
      * @param applicationXml {@link #applicationXml}
      */
-    public void setApplicationXml( String applicationXml )
+    public void setApplicationXml( File applicationXml )
     {
         this.applicationXml = applicationXml;
     }
@@ -466,7 +532,7 @@ public class EarMojo
      */
     protected String[] getExcludes()
     {
-        List<String> excludeList = new ArrayList<String>( FileUtils.getDefaultExcludesAsList() );
+        List<String> excludeList = new ArrayList<>( FileUtils.getDefaultExcludesAsList() );
         if ( earSourceExcludes != null && !"".equals( earSourceExcludes ) )
         {
             excludeList.addAll( Arrays.asList( StringUtils.split( earSourceExcludes, "," ) ) );
@@ -488,7 +554,7 @@ public class EarMojo
      */
     protected String[] getIncludes()
     {
-        return StringUtils.split( StringUtils.defaultString( earSourceIncludes ), "," );
+        return StringUtils.split( Objects.toString( earSourceIncludes, "" ), "," );
     }
 
     /**
@@ -496,7 +562,7 @@ public class EarMojo
      */
     public String[] getPackagingExcludes()
     {
-        if ( StringUtils.isEmpty( packagingExcludes ) )
+        if ( packagingExcludes == null || packagingExcludes.isEmpty() )
         {
             return new String[0];
         }
@@ -515,11 +581,11 @@ public class EarMojo
     }
 
     /**
-     * @return The arrays with the includes.
+     * @return the arrays with the includes
      */
     public String[] getPackagingIncludes()
     {
-        if ( StringUtils.isEmpty( packagingIncludes ) )
+        if ( packagingIncludes == null || packagingIncludes.isEmpty() )
         {
             return new String[] { "**" };
         }
@@ -587,63 +653,69 @@ public class EarMojo
     /**
      * Unpacks the module into the EAR structure.
      * 
-     * @param source File to be unpacked.
-     * @param destDir Location where to put the unpacked files.
-     * @throws NoSuchArchiverException In case of we don't have an appropriate archiver.
-     * @throws IOException In case of a general IOException.
+     * @param source file to be unpacked
+     * @param destDir where to put the unpacked files
+     * @param outdatedResources currently outdated resources
+     * @throws ArchiverException a corrupt archive
+     * @throws NoSuchArchiverException if we don't have an appropriate archiver
+     * @throws IOException in case of a general IOException
      */
-    public void unpack( File source, File destDir )
-        throws NoSuchArchiverException, IOException
+    public void unpack( File source, final File destDir, final Collection<String> outdatedResources )
+        throws ArchiverException, NoSuchArchiverException, IOException
     {
+        Path destPath = destDir.toPath();
+
         UnArchiver unArchiver = archiverManager.getUnArchiver( "zip" );
         unArchiver.setSourceFile( source );
         unArchiver.setDestDirectory( destDir );
+        unArchiver.setFileMappers( new FileMapper[] {
+            pName ->
+            {
+                removeFromOutdatedResources( destPath.resolve( pName ), outdatedResources );
+                return pName;
+            }
+        } );
 
         // Extract the module
         unArchiver.extract();
     }
 
-    /**
-     * Returns the {@link JarArchiver} implementation used to package the EAR file.
-     *
-     * By default the archiver is obtained from the Plexus container.
-     * 
-     * @return the archiver
-     */
-    protected JarArchiver getJarArchiver()
-    {
-        return jarArchiver;
-    }
-
     private void copyFile( File source, File target )
         throws MavenFilteringException, IOException, MojoExecutionException
     {
+        createParentIfNecessary( target );
         if ( filtering && !isNonFilteredExtension( source.getName() ) )
         {
-            // Silly that we have to do this ourselves
-            if ( target.getParentFile() != null && !target.getParentFile().exists() )
-            {
-                target.getParentFile().mkdirs();
-            }
-
             mavenFileFilter.copyFile( source, target, true, getFilterWrappers(), encoding );
         }
         else
         {
-            FileUtils.copyFile( source, target );
+            Files.copy( source.toPath(), target.toPath(), LinkOption.NOFOLLOW_LINKS,
+                       StandardCopyOption.REPLACE_EXISTING );
+        }
+    }
+
+    private void createParentIfNecessary( File target )
+        throws IOException
+    {
+        // Silly that we have to do this ourselves
+        File parentDirectory = target.getParentFile();
+        if ( parentDirectory != null && !parentDirectory.exists() )
+        {
+            Files.createDirectories( parentDirectory.toPath() );
         }
     }
 
     /**
-     * @param fileName The name of the file which should be checked.
-     * @return {@code true} if the name is part of the non filtered extensions {@code false} otherwise.
+     * @param fileName the name of the file which should be checked
+     * @return {@code true} if the name is part of the non filtered extensions; {@code false} otherwise
      */
     public boolean isNonFilteredExtension( String fileName )
     {
         return !mavenResourcesFiltering.filteredFileExtension( fileName, nonFilteredFileExtensions );
     }
 
-    private List<FileUtils.FilterWrapper> getFilterWrappers()
+    private List<FilterWrapper> getFilterWrappers()
         throws MojoExecutionException
     {
         if ( filterWrappers == null )
@@ -667,171 +739,345 @@ public class EarMojo
         return filterWrappers;
     }
 
-    private void changeManifestClasspath( EarModule module, File original, JavaEEVersion javaEEVersion )
+    private void changeManifestClasspath( EarModule module, File original, JavaEEVersion javaEEVersion,
+                                          Collection<String> outdatedResources )
         throws MojoFailureException
     {
+        final String moduleLibDir = module.getLibDir();
+        if ( !( ( moduleLibDir == null ) || skinnyModules || ( skinnyWars && module instanceof WebModule ) ) )
+        {
+            return;
+        }
+
+        // for new created items
+        FileTime outputFileTime = MavenArchiver.parseBuildOutputTimestamp( outputTimestamp )
+            .map( FileTime::from )
+            .orElse( null );
+
+        FileSystem fileSystem = null;
+
         try
         {
-            File workDirectory;
+            Path workDirectory;
 
             // Handle the case that the destination might be a directory (project-038)
+            // We can get FileSystems only for files
             if ( original.isFile() )
             {
-                // Create a temporary work directory
-                // MEAR-167 use uri as directory to prevent merging of artifacts with the same artifactId
-                workDirectory = new File( new File( getTempFolder(), "temp" ), module.getUri() );
-                workDirectory.mkdirs();
-                getLog().debug( "Created a temporary work directory: " + workDirectory.getAbsolutePath() );
-
-                // Unpack the archive to a temporary work directory
-                zipUnArchiver.setSourceFile( original );
-                zipUnArchiver.setDestDirectory( workDirectory );
-                zipUnArchiver.extract();
+                fileSystem = FileSystems.newFileSystem(
+                    original.toPath(), Thread.currentThread().getContextClassLoader() );
+                workDirectory = fileSystem.getRootDirectories().iterator().next();
             }
             else
             {
-                workDirectory = original;
+                workDirectory = original.toPath();
             }
 
             // Create a META-INF/MANIFEST.MF file if it doesn't exist (project-038)
-            File metaInfDirectory = new File( workDirectory, "META-INF" );
-            boolean newMetaInfCreated = metaInfDirectory.mkdirs();
-            if ( newMetaInfCreated )
+            Path metaInfDirectory = workDirectory.resolve( "META-INF" );
+            if ( !Files.exists( metaInfDirectory ) )
             {
-                // CHECKSTYLE_OFF: LineLength
-                getLog().debug( "This project did not have a META-INF directory before, so a new directory was created." );
-                // CHECKSTYLE_ON: LineLength
+                Files.createDirectory( metaInfDirectory );
+                if ( outputFileTime != null )
+                {
+                    Files.setLastModifiedTime( metaInfDirectory, outputFileTime );
+                }
+                getLog().debug(
+                    "This project did not have a META-INF directory before, so a new directory was created." );
             }
-            File newCreatedManifestFile = new File( metaInfDirectory, "MANIFEST.MF" );
-            boolean newManifestCreated = newCreatedManifestFile.createNewFile();
-            if ( newManifestCreated )
+            Path manifestFile = metaInfDirectory.resolve( "MANIFEST.MF" );
+            if ( !Files.exists( manifestFile ) )
             {
-                // CHECKSTYLE_OFF: LineLength
-                getLog().debug( "This project did not have a META-INF/MANIFEST.MF file before, so a new file was created." );
-                // CHECKSTYLE_ON: LineLength
+                Files.createFile( manifestFile );
+                if ( outputFileTime != null )
+                {
+                    Files.setLastModifiedTime( manifestFile, outputFileTime );
+                }
+                getLog().debug(
+                    "This project did not have a META-INF/MANIFEST.MF file before, so a new file was created." );
             }
 
-            // Read the manifest from disk
-            Manifest mf = new Manifest( new FileInputStream( newCreatedManifestFile ) );
+            Manifest mf = readManifest( manifestFile );
             Attribute classPath = mf.getMainSection().getAttribute( "Class-Path" );
-            List<String> classPathElements = new ArrayList<String>();
+            List<String> classPathElements = new ArrayList<>();
 
+            boolean classPathExists;
             if ( classPath != null )
             {
+                classPathExists = true;
                 classPathElements.addAll( Arrays.asList( classPath.getValue().split( " " ) ) );
             }
             else
             {
+                classPathExists = false;
                 classPath = new Attribute( "Class-Path", "" );
             }
 
-            // Remove JAR modules
-            for ( JarModule jm : getAllJarModules() )
+            if ( ( moduleLibDir != null ) && ( skinnyModules || ( skinnyWars && module instanceof WebModule ) ) )
             {
-                if ( module.getLibDir() != null )
+                // Remove modules
+                for ( EarModule otherModule : getAllEarModules() )
                 {
+                    if ( module.equals( otherModule ) )
+                    {
+                        continue;
+                    }
                     // MEAR-189:
                     // We use the original name, cause in case of outputFileNameMapping
                     // we could not not delete it and it will end up in the resulting EAR and the WAR
                     // will not be cleaned up.
-                    // CHECKSTYLE_OFF: LineLength
-                    File artifact = new File( new File( workDirectory, module.getLibDir() ),
-                                              module.getArtifact().getFile().getName() );
-                    // CHECKSTYLE_ON: LineLength
+                    final Path workLibDir = workDirectory.resolve( moduleLibDir );
+                    Path artifact = workLibDir.resolve( module.getArtifact().getFile().getName() );
 
                     // MEAR-217
                     // If WAR contains files with timestamps, but EAR strips them away (useBaseVersion=true)
-                    // the artifact is not found. Therefore respect the current fileNameMapping additionally.
+                    // the artifact is not found. Therefore, respect the current fileNameMapping additionally.
 
-                    if ( !artifact.exists() )
+                    if ( !Files.exists( artifact ) )
                     {
                         getLog().debug( "module does not exist with original file name." );
-                        artifact = new File( new File( workDirectory, module.getLibDir() ), jm.getBundleFileName() );
-                        getLog().debug( "Artifact with mapping:" + artifact.getAbsolutePath() );
+                        artifact = workLibDir.resolve( otherModule.getBundleFileName() );
+                        getLog().debug( "Artifact with mapping: " + artifact.toAbsolutePath() );
                     }
 
-                    if ( !artifact.exists() )
+                    if ( !Files.exists( artifact ) )
                     {
                         getLog().debug( "Artifact with mapping does not exist." );
-                        artifact = new File( new File( workDirectory, module.getLibDir() ),
-                                             jm.getArtifact().getFile().getName() );
-                        getLog().debug( "Artifact with orignal file name:" + artifact.getAbsolutePath() );
+                        artifact = workLibDir.resolve( otherModule.getArtifact().getFile().getName() );
+                        getLog().debug( "Artifact with original file name: " + artifact.toAbsolutePath() );
                     }
 
-                    if ( artifact.exists() )
+                    if ( !Files.exists( artifact ) )
+                    {
+                        getLog().debug( "Artifact with original file name does not exist." );
+                        final Artifact otherModuleArtifact = otherModule.getArtifact();
+                        if ( otherModuleArtifact.isSnapshot() )
+                        {
+                            try
+                            {
+                                artifact = workLibDir.resolve( MappingUtils.evaluateFileNameMapping(
+                                        ARTIFACT_DEFAULT_FILE_NAME_MAPPING, otherModuleArtifact ) );
+                                getLog()
+                                    .debug( "Artifact with default mapping file name: " + artifact.toAbsolutePath() );
+                            }
+                            catch ( InterpolationException e )
+                            {
+                                getLog().warn(
+                                    "Failed to evaluate file name for [" + otherModule + "] module using mapping: "
+                                        + ARTIFACT_DEFAULT_FILE_NAME_MAPPING );
+                            }
+                        }
+                    }
+
+                    if ( Files.exists( artifact ) )
                     {
                         getLog().debug( " -> Artifact to delete: " + artifact );
-                        if ( !artifact.delete() )
-                        {
-                            getLog().error( "Could not delete '" + artifact + "'" );
-                        }
+                        Files.delete( artifact );
                     }
                 }
             }
 
             // Modify the classpath entries in the manifest
-            for ( EarModule o : getModules() )
+            final boolean forceClassPathModification =
+                javaEEVersion.lt( JavaEEVersion.FIVE ) || defaultLibBundleDir == null;
+            final boolean classPathExtension = !skipClassPathModification || forceClassPathModification;
+            for ( EarModule otherModule : getModules() )
             {
-                if ( o instanceof JarModule )
+                if ( module.equals( otherModule ) )
                 {
-                    JarModule jm = (JarModule) o;
-                    if ( classPathElements.contains( jm.getBundleFileName() ) )
+                    continue;
+                }
+                final int moduleClassPathIndex = findModuleInClassPathElements( classPathElements, otherModule );
+                if ( moduleClassPathIndex != -1 )
+                {
+                    if ( otherModule.isClassPathItem() )
                     {
-                        classPathElements.set( classPathElements.indexOf( jm.getBundleFileName() ), jm.getUri() );
+                        classPathElements.set( moduleClassPathIndex, otherModule.getUri() );
                     }
                     else
                     {
-                        if ( !skipClassPathModification )
-                        {
-                            classPathElements.add( jm.getUri() );
-                        }
-                        else
-                        {
-                            if ( javaEEVersion.lt( JavaEEVersion.FIVE ) || defaultLibBundleDir == null )
-                            {
-                                classPathElements.add( jm.getUri() );
-                            }
-                        }
+                        classPathElements.remove( moduleClassPathIndex );
                     }
                 }
-            }
-            classPath.setValue( StringUtils.join( classPathElements.iterator(), " " ) );
-            mf.getMainSection().addConfiguredAttribute( classPath );
-
-            // Write the manifest to disk
-            PrintWriter pw = new PrintWriter( newCreatedManifestFile );
-            mf.write( pw );
-            pw.close();
-
-            if ( original.isFile() )
-            {
-                // Pack up the archive again from the work directory
-                if ( !original.delete() )
+                else if ( otherModule.isClassPathItem() && classPathExtension )
                 {
-                    getLog().error( "Could not delete original artifact file " + original );
+                    classPathElements.add( otherModule.getUri() );
                 }
+            }
 
-                getLog().debug( "Zipping module" );
-                zipArchiver.setDestFile( original );
-                zipArchiver.addDirectory( workDirectory );
-                zipArchiver.createArchive();
+            // Remove provided modules from classpath
+            for ( EarModule otherModule : getProvidedEarModules() )
+            {
+                final int moduleClassPathIndex = findModuleInClassPathElements( classPathElements, otherModule );
+                if ( moduleClassPathIndex != -1 )
+                {
+                    classPathElements.remove( moduleClassPathIndex );
+                }
+            }
+
+            if ( !skipClassPathModification || !classPathElements.isEmpty() || classPathExists )
+            {
+                classPath.setValue( StringUtils.join( classPathElements.iterator(), " " ) );
+                mf.getMainSection().addConfiguredAttribute( classPath );
+
+                // Write the manifest to disk, preserve timestamp
+                FileTime lastModifiedTime = Files.getLastModifiedTime( manifestFile );
+                try ( BufferedWriter writer = Files.newBufferedWriter( manifestFile, StandardCharsets.UTF_8,
+                                                                       StandardOpenOption.WRITE,
+                                                                       StandardOpenOption.CREATE,
+                                                                       StandardOpenOption.TRUNCATE_EXISTING ) )
+                {
+                    mf.write( writer );
+                }
+                Files.setLastModifiedTime( manifestFile, lastModifiedTime );
+                removeFromOutdatedResources( manifestFile, outdatedResources );
+            }
+
+            if ( fileSystem != null )
+            {
+                fileSystem.close();
+                fileSystem = null;
             }
         }
-        catch ( ManifestException e )
+        catch ( ManifestException | IOException | ArchiverException e )
         {
-            throw new MojoFailureException( e.getMessage() );
+            throw new MojoFailureException( e.getMessage(), e );
         }
-        catch ( ZipException e )
+        finally
         {
-            throw new MojoFailureException( e.getMessage() );
+            if ( fileSystem != null )
+            {
+                try
+                {
+                    fileSystem.close();
+                }
+                catch ( IOException e )
+                {
+                    // ignore here
+                }
+            }
         }
-        catch ( IOException e )
+    }
+
+    private static Manifest readManifest( Path manifestFile )
+        throws IOException
+    {
+        // Read the manifest from disk
+        try ( InputStream in = Files.newInputStream( manifestFile ) )
         {
-            throw new MojoFailureException( e.getMessage() );
+            return new Manifest( in );
         }
-        catch ( ArchiverException e )
+    }
+
+    private Collection<String> initOutdatedResources()
+    {
+        final Collection<String> outdatedResources = new ArrayList<>();
+        
+        if ( getWorkDirectory().exists() )
         {
-            throw new MojoFailureException( e.getMessage() );
+            try
+            {
+                Files.walkFileTree( getWorkDirectory().toPath(), new SimpleFileVisitor<Path>() 
+                {
+                    @Override
+                    public FileVisitResult visitFile( Path file, BasicFileAttributes attrs )
+                        throws IOException
+                    {
+                        outdatedResources.add( getWorkDirectory().toPath().relativize( file ).toString() );
+                        return super.visitFile( file, attrs );
+                    }
+                } );
+            }
+            catch ( IOException e )
+            {
+                getLog().warn( "Can't detect outdated resources", e );
+            } 
         }
+
+        getLog().debug( "initOutdatedResources: " + outdatedResources );
+        return outdatedResources;
+    }
+
+    private void deleteOutdatedResources( final Collection<String> outdatedResources )
+    {
+        getLog().debug( "deleteOutdatedResources: " + outdatedResources );
+        final long startTime = session.getStartTime().getTime();
+
+        getLog().debug( "deleteOutdatedResources session startTime: " + startTime );
+
+        for ( String outdatedResource : outdatedResources )
+        {
+            File resourceFile = new File( getWorkDirectory(), outdatedResource );
+            if ( resourceFile.lastModified() < startTime )
+            {
+                getLog().info( "deleting outdated resource " + outdatedResource );
+                getLog().debug( outdatedResource + " last modified: " + resourceFile.lastModified() );
+                resourceFile.delete();
+            }
+        }
+    }
+
+    private void removeFromOutdatedResources( Path destination, Collection<String> outdatedResources )
+    {
+        Path relativeDestFile;
+        try
+        {
+            relativeDestFile = getWorkDirectory().toPath().relativize( destination.normalize() );
+        }
+        catch ( ProviderMismatchException e )
+        {
+            relativeDestFile = destination.normalize();
+        }
+
+        if ( outdatedResources.remove( relativeDestFile.toString() ) )
+        {
+            getLog().debug( "Remove from outdatedResources: " + relativeDestFile );
+        }
+    }
+
+    /**
+     * Searches for the given JAR module in the list of classpath elements. If JAR module is found among specified
+     * classpath elements then returns index of first matching element. Returns -1 otherwise.
+     *
+     * @param classPathElements classpath elements to search among
+     * @param module module to find among classpath elements defined by {@code classPathElements}
+     * @return -1 if {@code module} was not found in {@code classPathElements} or index of item of
+     * {@code classPathElements} which matches {@code module}
+     */
+    private int findModuleInClassPathElements( final List<String> classPathElements, final EarModule module )
+    {
+        if ( classPathElements.isEmpty() )
+        {
+            return -1;
+        }
+        int moduleClassPathIndex = classPathElements.indexOf( module.getBundleFileName() );
+        if ( moduleClassPathIndex != -1 )
+        {
+            return moduleClassPathIndex;
+        }
+        final Artifact artifact = module.getArtifact();
+        moduleClassPathIndex = classPathElements.indexOf( artifact.getFile().getName() );
+        if ( moduleClassPathIndex != -1 )
+        {
+            return moduleClassPathIndex;
+        }
+        if ( artifact.isSnapshot() )
+        {
+            try
+            {
+                moduleClassPathIndex = classPathElements
+                    .indexOf( MappingUtils.evaluateFileNameMapping( ARTIFACT_DEFAULT_FILE_NAME_MAPPING, artifact ) );
+                if ( moduleClassPathIndex != -1 )
+                {
+                    return moduleClassPathIndex;
+                }
+            }
+            catch ( InterpolationException e )
+            {
+                getLog().warn( "Failed to evaluate file name for [" + module + "] module using mapping: "
+                    + ARTIFACT_DEFAULT_FILE_NAME_MAPPING );
+            }
+        }
+        return classPathElements.indexOf( module.getUri() );
     }
 }

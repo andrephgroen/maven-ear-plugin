@@ -35,24 +35,39 @@ String[] includedEntries = {
     "WEB-INF/web.xml",
     "META-INF/MANIFEST.MF"
 };
+
+// Reproducible Builds: check that every entry has the same timestamp  
+long entryTime = -1;
+
 for ( String included : includedEntries )
 {
     System.out.println( "Checking for included archive entry " + included );
-    if ( jar.getEntry( included ) == null )
+    JarEntry jarEntry = jar.getEntry( included );
+    if ( jarEntry == null )
     {
-        throw new IllegalStateException( "Missing archive entry: " + included );
+        throw new IllegalStateException( "Missing WAR entry: " + included );
+    }
+    if ( entryTime < 0 )
+    {
+        entryTime = jarEntry.getTime();
+    }
+    if ( entryTime != jarEntry.getTime() )
+    {
+        throw new IllegalStateException( "Invalid jar entry time: " + jarEntry.getTime()
+            + " of archive entry: " + included
+            + ", expected: " + entryTime );
     }
 }
 
 Manifest manifest = jar.getManifest();
 String manifestClassPath = manifest.getMainAttributes().getValue("Class-Path");
-if ( !manifestClassPath.equals("commons-lang-commons-lang-2.5.jar") )
+if ( !manifestClassPath.equals("commons-lang-commons-lang-2.6.jar") )
 {
-    throw new IllegalStateException( "Missing entry in war MANIFEST.MF: commons-lang-commons-lang-2.5.jar");
+    throw new IllegalStateException( "Missing entry in war MANIFEST.MF: commons-lang-commons-lang-2.6.jar");
 }
 
 String[] excludedEntries = {
-    "WEB-INF/lib/commons-lang-commons-lang-2.5.jar"
+    "WEB-INF/lib/commons-lang-commons-lang-2.6.jar"
 };
 for ( String excluded : excludedEntries )
 {
@@ -78,7 +93,7 @@ JarFile jar = new JarFile( jarFile );
 String[] includedEntries = {
     "WEB-INF/web.xml",
     "META-INF/MANIFEST.MF",
-    "WEB-INF/lib/commons-lang-2.5.jar"
+    "WEB-INF/lib/commons-lang-2.6.jar"
 };
 for ( String included : includedEntries )
 {

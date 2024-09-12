@@ -19,7 +19,6 @@ package org.apache.maven.plugins.ear;
  * under the License.
  */
 
-import org.codehaus.plexus.util.StringUtils;
 import org.codehaus.plexus.util.xml.XMLWriter;
 
 /**
@@ -72,12 +71,12 @@ public class ResourceRef
      */
    public ResourceRef( String name, String type, String auth, String lookupName )
     {
-        if ( StringUtils.isEmpty( name ) )
+        if ( name == null || name.isEmpty() )
         {
             throw new IllegalArgumentException( RESOURCE_REF_NAME + " in " + RESOURCE_REF_NAME
                 + " element cannot be null." );
         }
-        else if ( StringUtils.isEmpty( type ) && StringUtils.isEmpty( auth ) )
+        else if ( ( type == null || type.isEmpty() ) && ( auth == null || auth.isEmpty() ) )
         {
             throw new IllegalArgumentException( RESOURCE_TYPE + " in " + RESOURCE_REF_NAME
                 + " element cannot be null " );
@@ -91,7 +90,7 @@ public class ResourceRef
     }
 
     /**
-     * Appends the <tt>XML</tt> representation of this env-entry.
+     * Appends the {@code XML} representation of this env-entry.
      * 
      * @param writer the writer to use
      */
@@ -180,7 +179,7 @@ public class ResourceRef
     }
     
     /**
-     * @return {@link #LookupName}
+     * @return {@link #lookupName}
      */
     public String getLookupName() 
     {
@@ -188,7 +187,7 @@ public class ResourceRef
     }
 
    /**
-    * @param auth {@link #LookupName}
+    * @param lookupName {@link #lookupName}
     */
     public void setLookupName( String lookupName ) 
     {

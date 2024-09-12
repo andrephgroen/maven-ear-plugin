@@ -60,6 +60,11 @@ public abstract class AbstractEarModule
 
     private String artifactId;
 
+    /**
+     * The type of the artifact
+     */
+    protected String type;
+
     private String classifier;
 
     /**
@@ -91,6 +96,24 @@ public abstract class AbstractEarModule
 
     private String moduleId;
 
+    /**
+     * Directory of module which contains libraries packaged into module. {@code null} value means that module
+     * doesn't contain any library. Each module type can provide default value for this directory and this option
+     * can be used to override that default value. If module libraries are located at the root of module then use
+     * single slash (/) to configure that in POM. That is, a single slash is treated as an empty string.
+     */
+    protected String libDirectory;
+
+    /**
+     * If module is considered for inclusion into the Class-Path entry of MANIFEST.mf of other modules. {@code false}
+     * value leads to removal of the module from the Class-Path entry. {@code true} value leads to modification of the
+     * reference to the module in the Class-Path entry if such reference exists or leads to adding of the module into
+     * the Class-Path entry if such reference doesn't exist. Removal, modification or adding of the reference in the
+     * Class-Path entry depends on libDirectory property of another module and on skinnyWars / skinnyModules parameters
+     * of EAR Plugin.
+     */
+    protected boolean classPathItem;
+
     // This is injected once the module has been built.
 
     /**
@@ -115,6 +138,7 @@ public abstract class AbstractEarModule
         this.artifact = a;
         this.groupId = a.getGroupId();
         this.artifactId = a.getArtifactId();
+        this.type = a.getType();
         this.classifier = a.getClassifier();
         this.bundleDir = null;
     }
@@ -195,6 +219,14 @@ public abstract class AbstractEarModule
     }
 
     /**
+     * {@inheritDoc}
+     */
+    public String getType()
+    {
+        return type;
+    }
+
+    /**
      * Returns the artifact's groupId.
      * 
      * @return {@link #groupId}
@@ -231,17 +263,29 @@ public abstract class AbstractEarModule
      */
     public String getBundleDir()
     {
-        if ( bundleDir != null )
-        {
-            bundleDir = cleanBundleDir( bundleDir );
-        }
+        bundleDir = cleanArchivePath( bundleDir );
         return bundleDir;
     }
 
     /**
-     * Returns the bundle file name. If null, the artifact's file name is returned.
-     * 
-     * @return the bundle file name
+     * {@inheritDoc}
+     */
+    public String getLibDir()
+    {
+        libDirectory = cleanArchivePath( libDirectory );
+        return libDirectory;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public boolean isClassPathItem()
+    {
+        return classPathItem;
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public String getBundleFileName()
     {
@@ -360,53 +404,34 @@ public abstract class AbstractEarModule
     }
 
     /**
-     * Cleans the bundle directory so that it might be used properly.
+     * Cleans the path pointing to the resource inside the archive so that it might be used properly.
      * 
-     * @param bundleDir the bundle directory to clean
-     * @return the cleaned bundle directory
+     * @param path the path to clean, can be {@code null}
+     * @return the cleaned path or {@code null} if given {@code path} is {@code null}
      */
-    static String cleanBundleDir( String bundleDir )
+    static String cleanArchivePath( String path )
     {
-        if ( bundleDir == null )
+        if ( path == null )
         {
             return null;
         }
 
         // Using slashes
-        bundleDir = bundleDir.replace( '\\', '/' );
+        path = path.replace( '\\', '/' );
 
-        // Remove '/' prefix if any so that directory is a relative path
-        if ( bundleDir.startsWith( "/" ) )
+        // Remove '/' prefix if any so that path is a relative path
+        if ( path.startsWith( "/" ) )
         {
-            bundleDir = bundleDir.substring( 1, bundleDir.length() );
+            path = path.substring( 1, path.length() );
         }
 
-        if ( bundleDir.length() > 0 && !bundleDir.endsWith( "/" ) )
+        if ( path.length() > 0 && !path.endsWith( "/" ) )
         {
-            // Adding '/' suffix to specify a directory structure if it is not empty
-            bundleDir = bundleDir + "/";
+            // Adding '/' suffix to specify a path structure if it is not empty
+            path = path + "/";
         }
 
-        return bundleDir;
-    }
-
-    /**
-     * Specify if the objects are both null or both equal.
-     * 
-     * @param first the first object
-     * @param second the second object
-     * @return true if parameters are either both null or equal
-     */
-    static boolean areNullOrEqual( Object first, Object second )
-    {
-        if ( first != null )
-        {
-            return first.equals( second );
-        }
-        else
-        {
-            return second == null;
-        }
+        return path;
     }
 
     /**
@@ -426,13 +451,5 @@ public abstract class AbstractEarModule
     public boolean changeManifestClasspath()
     {
         return true;
-    }
-
-    /**
-     * @return always {@code null}
-     */
-    public String getLibDir()
-    {
-        return null;
     }
 }

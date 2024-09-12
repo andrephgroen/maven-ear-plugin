@@ -33,11 +33,18 @@ import java.util.Set;
 public class WebModule
     extends AbstractEarModule
 {
+    /**
+     * Default type of the artifact of a Web application module.
+     */
+    public static final String DEFAULT_ARTIFACT_TYPE = "war";
+
     private static final String WEB_MODULE = "web";
 
     private static final String WEB_URI_FIELD = "web-uri";
 
     private static final String CONTEXT_ROOT_FIELD = "context-root";
+
+    private static final String DEFAULT_LIB_DIRECTORY = "WEB-INF/lib";
 
     private String contextRoot;
 
@@ -46,6 +53,8 @@ public class WebModule
      */
     public WebModule()
     {
+        this.type = DEFAULT_ARTIFACT_TYPE;
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -55,6 +64,7 @@ public class WebModule
     {
         super( a );
         this.contextRoot = getDefaultContextRoot( a );
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -98,7 +108,7 @@ public class WebModule
     /**
      * Returns the context root to use for the web module.
      *
-     * Note that this might return <tt>null</tt> till the artifact has been resolved.
+     * Note that this might return {@code null} till the artifact has been resolved.
      * 
      * @return the context root
      */
@@ -108,15 +118,7 @@ public class WebModule
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public String getType()
-    {
-        return "war";
-    }
-
-    /**
-     * Generates a default context root for the given artifact, based on the <tt>artifactId</tt>.
+     * Generates a default context root for the given artifact, based on the {@code artifactId}.
      * 
      * @param a the artifact
      * @return a context root for the artifact
@@ -128,13 +130,5 @@ public class WebModule
             throw new NullPointerException( "Artifact could not be null." );
         }
         return "/" + a.getArtifactId();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public String getLibDir()
-    {
-        return "WEB-INF/lib";
     }
 }

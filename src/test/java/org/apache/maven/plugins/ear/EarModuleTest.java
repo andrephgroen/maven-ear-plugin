@@ -20,8 +20,8 @@ package org.apache.maven.plugins.ear;
  */
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
-import org.apache.maven.plugins.ear.AbstractEarModule;
 import org.junit.Test;
 
 /**
@@ -33,12 +33,14 @@ public class EarModuleTest
 {
 
     @Test
-    public void testCleanBuildDir()
+    public void testCleanArchivePath()
     {
-        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanBundleDir( "APP-INF/lib" ) );
-        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanBundleDir( "APP-INF/lib/" ) );
-        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanBundleDir( "/APP-INF/lib" ) );
-        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanBundleDir( "/APP-INF/lib/" ) );
-        assertEquals( "", AbstractEarModule.cleanBundleDir( "/" ) );
+        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanArchivePath( "APP-INF/lib" ) );
+        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanArchivePath( "APP-INF/lib/" ) );
+        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanArchivePath( "/APP-INF/lib" ) );
+        assertEquals( "APP-INF/lib/", AbstractEarModule.cleanArchivePath( "/APP-INF/lib/" ) );
+        assertEquals( "", AbstractEarModule.cleanArchivePath( "/" ) );
+        assertEquals( "", AbstractEarModule.cleanArchivePath( "" ) );
+        assertNull( AbstractEarModule.cleanArchivePath( null ) );
     }
 }

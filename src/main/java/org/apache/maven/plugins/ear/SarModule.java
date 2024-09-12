@@ -37,13 +37,22 @@ public class SarModule
     extends AbstractEarModule
     implements JbossEarModule
 {
+    /**
+     * Default type of the artifact of a JBoss sar module.
+     */
+    public static final String DEFAULT_ARTIFACT_TYPE = "sar";
+
     private static final String SAR_MODULE = "connector";
+
+    private static final String DEFAULT_LIB_DIRECTORY = "lib";
 
     /**
      * Create an instance.
      */
     public SarModule()
     {
+        this.type = DEFAULT_ARTIFACT_TYPE;
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -52,6 +61,7 @@ public class SarModule
     public SarModule( Artifact a )
     {
         super( a );
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -80,13 +90,5 @@ public class SarModule
         writer.writeText( getUri() );
         writer.endElement();
         writer.endElement();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public String getType()
-    {
-        return "sar";
     }
 }

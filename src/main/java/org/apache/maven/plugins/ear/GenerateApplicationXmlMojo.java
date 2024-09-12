@@ -45,9 +45,10 @@ import org.codehaus.plexus.util.FileUtils;
  * 
  * @author <a href="snicoll@apache.org">Stephane Nicoll</a>
  */
-// CHECKSTYLE_OFF: LineLength
-@Mojo( name = "generate-application-xml", defaultPhase = LifecyclePhase.GENERATE_RESOURCES, threadSafe = true, requiresDependencyResolution = ResolutionScope.TEST )
-// CHECKSTYLE_ON: LineLength
+@Mojo( name = "generate-application-xml",
+       defaultPhase = LifecyclePhase.GENERATE_RESOURCES,
+       threadSafe = true,
+       requiresDependencyResolution = ResolutionScope.TEST )
 public class GenerateApplicationXmlMojo
     extends AbstractEarMojo
 {
@@ -98,14 +99,14 @@ public class GenerateApplicationXmlMojo
     private String description;
 
     /**
-     * Defines how the <tt>library-directory</tt> element should be written in the application.xml file.
+     * Defines how the {@code library-directory} element should be written in the application.xml file.
      * <p/>
      * Three special values can be set:
      * <ul>
-     * <li><code>DEFAULT</code> (default) generates a <tt>library-directory</tt> element with the value of the
-     * <tt>defaultLibBundleDir</tt> parameter</li>
-     * <li><code>EMPTY</code> generates an empty <tt>library-directory</tt> element. Per spec, this disables the
-     * scanning of jar files in the <tt>lib</tt> directory of the ear file</li>
+     * <li><code>DEFAULT</code> (default) generates a {@code library-directory} element with the value of the
+     * {@code defaultLibBundleDir} parameter</li>
+     * <li><code>EMPTY</code> generates an empty {@code library-directory} element. Per spec, this disables the
+     * scanning of jar files in the {@code lib} directory of the ear file</li>
      * <li><code>NONE</code> does not write the library-directory element at all. A corner case that can be used in
      * Oracle Weblogic to delegate the classloading to the container</li>
      * </ul>
@@ -238,7 +239,10 @@ public class GenerateApplicationXmlMojo
         File outputDir = new File( generatedDescriptorLocation );
         if ( !outputDir.exists() )
         {
-            outputDir.mkdirs();
+            if ( !outputDir.mkdirs() )
+            {
+                throw new EarPluginException( "Error creating " + outputDir );
+            }
         }
 
         File descriptor = new File( outputDir, "application.xml" );
@@ -253,7 +257,7 @@ public class GenerateApplicationXmlMojo
     }
 
     /**
-     * Generates the jboss deployment descriptor.
+     * Generates the JBoss deployment descriptor.
      * 
      * @throws EarPluginException if the configuration is invalid
      */
@@ -263,7 +267,10 @@ public class GenerateApplicationXmlMojo
         File outputDir = new File( generatedDescriptorLocation );
         if ( !outputDir.exists() )
         {
-            outputDir.mkdirs();
+            if ( !outputDir.mkdirs() )
+            {
+                throw new EarPluginException( "Error creating " + outputDir );
+            }
         }
 
         File descriptor = new File( outputDir, "jboss-app.xml" );
@@ -281,7 +288,7 @@ public class GenerateApplicationXmlMojo
     private List<SecurityRole> buildSecurityRoles()
         throws EarPluginException
     {
-        final List<SecurityRole> result = new ArrayList<SecurityRole>();
+        final List<SecurityRole> result = new ArrayList<>();
         if ( security == null )
         {
             return result;
@@ -342,7 +349,7 @@ public class GenerateApplicationXmlMojo
     private List<EnvEntry> buildEnvEntries()
         throws EarPluginException
     {
-        final List<EnvEntry> result = new ArrayList<EnvEntry>();
+        final List<EnvEntry> result = new ArrayList<>();
         if ( envEntries == null )
         {
             return result;
@@ -355,11 +362,9 @@ public class GenerateApplicationXmlMojo
 
             final PlexusConfiguration[] allEnvEntries = envEntries.getChildren( EnvEntry.ENV_ENTRY );
 
-            getLog().debug( "buildEnvEntries: allEnvEntries:" + allEnvEntries );
             getLog().debug( "buildEnvEntries: allEnvEntries size:" + allEnvEntries.length );
             for ( PlexusConfiguration envEntry : allEnvEntries )
             {
-                // CHECKSTYLE_OFF: LineLength
                 final String childDescription =
                     interpolate( ssi, envEntry.getChild( EnvEntry.DESCRIPTION ).getValue() );
                 final String childEnvEntryName =
@@ -370,7 +375,6 @@ public class GenerateApplicationXmlMojo
                     interpolate( ssi, envEntry.getChild( EnvEntry.ENV_ENTRY_VALUE ).getValue() );
                 final String childEnvLookupNameValue =
                     interpolate( ssi, envEntry.getChild( EnvEntry.ENV_LOOKUP_NAME ).getValue() );
-                // CHECKSTYLE_ON: LineLength
 
                 try
                 {
@@ -400,7 +404,7 @@ public class GenerateApplicationXmlMojo
     private List<EjbRef> buildEjbEntries()
         throws EarPluginException
     {
-        final List<EjbRef> result = new ArrayList<EjbRef>();
+        final List<EjbRef> result = new ArrayList<>();
         if ( ejbRefs == null )
         {
             return result;
@@ -415,14 +419,12 @@ public class GenerateApplicationXmlMojo
 
             for ( PlexusConfiguration ejbEntry : allEjbEntries )
             {
-                // CHECKSTYLE_OFF: LineLength
                 final String childDescription =
                     interpolate( ssi, ejbEntry.getChild( EnvEntry.DESCRIPTION ).getValue() );
                 final String childEjbEntryName = interpolate( ssi, ejbEntry.getChild( EjbRef.EJB_NAME ).getValue() );
                 final String childEjbEntryType = interpolate( ssi, ejbEntry.getChild( EjbRef.EJB_TYPE ).getValue() );
                 final String childEjbLookupNameValue =
                     interpolate( ssi, ejbEntry.getChild( EjbRef.EJB_LOOKUP_NAME ).getValue() );
-                // CHECKSTYLE_ON: LineLength
 
                 try
                 {
@@ -452,7 +454,7 @@ public class GenerateApplicationXmlMojo
     private List<ResourceRef> buildResourceRefs()
         throws EarPluginException
     {
-        final List<ResourceRef> result = new ArrayList<ResourceRef>();
+        final List<ResourceRef> result = new ArrayList<>();
         if ( resourceRefs == null )
         {
             return result;
@@ -467,13 +469,11 @@ public class GenerateApplicationXmlMojo
             // TODO: Check if this is a good idea hard code that here? Better idea?
             final PlexusConfiguration[] allResourceRefEntries = resourceRefs.getChildren( "resourceRef" );
 
-            getLog().debug( "allResourceRefEntries: " + allResourceRefEntries );
             getLog().debug( "allResourceRefEntries length: " + allResourceRefEntries.length );
             for ( PlexusConfiguration resEntry : allResourceRefEntries )
             {
                 getLog().debug( "Resources resEntry:" + resEntry.getName() );
 
-                // CHECKSTYLE_OFF: LineLength
                 final String childResRefName =
                     interpolate( ssi, resEntry.getChild( ResourceRef.RESOURCE_REF_NAME ).getValue() );
                 final String childResType =
@@ -482,13 +482,11 @@ public class GenerateApplicationXmlMojo
                     interpolate( ssi, resEntry.getChild( ResourceRef.RESOURCE_AUTH ).getValue() );
                 final String childResRefLookupName =
                     interpolate( ssi, resEntry.getChild( ResourceRef.LOOKUP_NAME ).getValue() );
-                // CHECKSTYLE_ON: LineLength
 
                 try
                 {
-                    // CHECKSTYLE_OFF: LineLength
-                    result.add( new ResourceRef( childResRefName, childResType, childResRefAuth, childResRefLookupName ) );
-                    // CHECKSTYLE_ON: LineLength
+                    result.add(
+                            new ResourceRef( childResRefName, childResType, childResRefAuth, childResRefLookupName ) );
                 }
                 catch ( IllegalArgumentException e )
                 {
@@ -505,7 +503,7 @@ public class GenerateApplicationXmlMojo
     }
 
     /**
-     * Returns the value to use for the <tt>library-directory</tt> element, based on the library directory mode.
+     * Returns the value to use for the {@code library-directory} element, based on the library directory mode.
      */
     private String getActualLibraryDirectory()
         throws EarPluginException

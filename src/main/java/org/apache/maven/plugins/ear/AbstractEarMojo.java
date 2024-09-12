@@ -118,23 +118,15 @@ public abstract class AbstractEarMojo
 
     /**
      * The file name mapping to use for all dependencies included in the EAR file. The mapping between artifacts and the
-     * file names which is used within the EAR file. Details see
-     * <a href="http://maven.apache.org/shared/maven-mapping/index.html">Maven Mapping Reference</a>.
-     * 
+     * file names which is used within the EAR file.
+     * Details see
+     * <a href="./examples/customize-file-name-mapping.html">Customizing The File Name Mapping</a>.
+     *
      * @since 3.0.0
      */
-    // CHECKSTYLE_OFF: LineLength
-    @Parameter( defaultValue = "@{groupId}@-@{artifactId}@-@{version}@@{dashClassifier?}@.@{extension}@", required = true )
+    @Parameter( defaultValue = "@{groupId}@-@{artifactId}@-@{version}@@{dashClassifier?}@.@{extension}@",
+                required = true )
     private String outputFileNameMapping;
-    // CHECKSTYLE_ON: LineLength
-
-    /**
-     * When using a {@link #outputFileNameMapping} with versions, either use the {@code baseVersion} or the
-     * {@code version}. When the artifact is a SNAPSHOT, {@code version} will always return a value with a
-     * {@code -SNAPSHOT} postfix instead of the possible timestamped value.
-     */
-    @Parameter
-    private Boolean useBaseVersion;
 
     /**
      * Directory that resources are copied to during the build.
@@ -159,15 +151,11 @@ public abstract class AbstractEarMojo
     @Parameter
     private String mainArtifactId = "none";
 
-    /**
-     * temp folder location.
-     */
-    @Parameter( defaultValue = "${project.build.directory}", required = true )
-    private File tempFolder;
-
     private List<EarModule> earModules;
 
-    private List<JarModule> allJarModules;
+    private List<EarModule> allEarModules;
+
+    private List<EarModule> providedEarModules;
 
     private JbossConfiguration jbossConfiguration;
 
@@ -179,7 +167,7 @@ public abstract class AbstractEarMojo
         {
             getLog().error( "fileNameMapping has been removed with version 3.0.0. You are still using it." );
             getLog().error( "Use outputFileNameMapping instead." );
-            throw new MojoExecutionException( "fileNameMapping has ben removed with version 3.0.0 "
+            throw new MojoExecutionException( "fileNameMapping has been removed with version 3.0.0 "
                 + "but you are still using it." );
         }
 
@@ -215,14 +203,8 @@ public abstract class AbstractEarMojo
             new EarExecutionContext( project, mainArtifactId, defaultLibBundleDir, jbossConfiguration,
                                      outputFileNameMapping, typeMappingService );
 
-        if ( useBaseVersion != null )
-        {
-            getLog().warn( "Using useBaseVersion not yet fixed." );
-            // earExecutionContext.getOutputFileNameMapping().setUseBaseVersion( useBaseVersion );
-        }
-
         getLog().debug( "Resolving ear modules ..." );
-        List<EarModule> allModules = new ArrayList<EarModule>();
+        List<EarModule> allModules = new ArrayList<>();
         try
         {
             if ( modules != null && modules.length > 0 )
@@ -270,8 +252,9 @@ public abstract class AbstractEarMojo
 
         // Now we have everything let's built modules which have not been excluded
         ScopeArtifactFilter filter = new ScopeArtifactFilter( Artifact.SCOPE_RUNTIME );
-        allJarModules = new ArrayList<JarModule>();
-        earModules = new ArrayList<EarModule>();
+        allEarModules = new ArrayList<>();
+        providedEarModules = new ArrayList<>();
+        earModules = new ArrayList<>();
         for ( EarModule earModule : allModules )
         {
             if ( earModule.isExcluded() )
@@ -280,13 +263,14 @@ public abstract class AbstractEarMojo
             }
             else
             {
-                if ( earModule instanceof JarModule )
-                {
-                    allJarModules.add( (JarModule) earModule );
-                }
+                allEarModules.add( earModule );
                 if ( filter.include( earModule.getArtifact() ) )
                 {
                     earModules.add( earModule );
+                }
+                else
+                {
+                    providedEarModules.add( earModule );
                 }
             }
         }
@@ -306,15 +290,27 @@ public abstract class AbstractEarMojo
     }
 
     /**
-     * @return The list of {@link #allJarModules}. This corresponds to all JAR modules (compile + runtime).
+     * @return The list of {@link #allEarModules}. This corresponds to all modules (provided + compile + runtime).
      */
-    protected List<JarModule> getAllJarModules()
+    protected List<EarModule> getAllEarModules()
     {
-        if ( allJarModules == null )
+        if ( allEarModules == null )
+        {
+            throw new IllegalStateException( "EAR modules have not been initialized" );
+        }
+        return allEarModules;
+    }
+
+    /**
+     * @return the list of {@link #providedEarModules}. This corresponds to provided modules.
+     */
+    protected List<EarModule> getProvidedEarModules()
+    {
+        if ( providedEarModules == null )
         {
             throw new IllegalStateException( "Jar modules have not been initialized" );
         }
-        return allJarModules;
+        return providedEarModules;
     }
 
     /**
@@ -339,14 +335,6 @@ public abstract class AbstractEarMojo
     protected JbossConfiguration getJbossConfiguration()
     {
         return jbossConfiguration;
-    }
-
-    /**
-     * @return {@link #tempFolder}
-     */
-    public File getTempFolder()
-    {
-        return tempFolder;
     }
 
     /**
@@ -406,7 +394,7 @@ public abstract class AbstractEarMojo
             final String jmxName = jboss.getChild( JbossConfiguration.JMX_NAME ).getValue();
             final String moduleOrder = jboss.getChild( JbossConfiguration.MODULE_ORDER ).getValue();
 
-            final List<String> dataSources = new ArrayList<String>();
+            final List<String> dataSources = new ArrayList<>();
             final PlexusConfiguration dataSourcesEl = jboss.getChild( JbossConfiguration.DATASOURCES );
             if ( dataSourcesEl != null )
             {

@@ -30,13 +30,22 @@ import org.codehaus.plexus.util.xml.XMLWriter;
 public class RarModule
     extends AbstractEarModule
 {
+    /**
+     * Default type of the artifact of an Java EE connector module.
+     */
+    public static final String DEFAULT_ARTIFACT_TYPE = "rar";
+
     private static final String RAR_MODULE = "connector";
+
+    private static final String DEFAULT_LIB_DIRECTORY = "/";
 
     /**
      * Create an instance.
      */
     public RarModule()
     {
+        this.type = DEFAULT_ARTIFACT_TYPE;
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -45,6 +54,7 @@ public class RarModule
     public RarModule( Artifact a )
     {
         super( a );
+        this.libDirectory = DEFAULT_LIB_DIRECTORY;
     }
 
     /**
@@ -60,13 +70,5 @@ public class RarModule
         writeAltDeploymentDescriptor( writer, version );
 
         writer.endElement();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public String getType()
-    {
-        return "rar";
     }
 }

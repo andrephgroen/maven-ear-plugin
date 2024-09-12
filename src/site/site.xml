@@ -19,33 +19,9 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-<project xmlns="http://maven.apache.org/DECORATION/1.0.0"
+<project xmlns="http://maven.apache.org/DECORATION/1.8.0"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/DECORATION/1.0.0 http://maven.apache.org/xsd/decoration-1.0.0.xsd">
-  <bannerLeft>
-    <src>http://maven.apache.org/images/apache-maven-project.png</src>
-    <href>http://www.apache.org/</href>
-  </bannerLeft>
-
-  <bannerRight>
-    <src>http://maven.apache.org/images/maven-logo-black-on-white.png</src>
-    <href>http://maven.apache.org/</href>
-  </bannerRight>
-  <skin>
-    <groupId>org.apache.maven.skins</groupId>
-    <artifactId>maven-fluido-skin</artifactId>
-    <version>1.7</version>
-  </skin>
-
-  <custom>
-    <fluidoSkin>
-      <sourceLineNumbersEnabled>true</sourceLineNumbersEnabled>
-      <googlePlusOne />
-      <googleSearch>
-        <sitesearch>maven.apache.org/plugins/maven-ear-plugin/</sitesearch>
-      </googleSearch>
-    </fluidoSkin>
-  </custom>
+  xsi:schemaLocation="http://maven.apache.org/DECORATION/1.8.0 http://maven.apache.org/xsd/decoration-1.0.0.xsd">
 
   <body>
     <menu name="Overview">
@@ -54,7 +30,7 @@ under the License.
       <item name="Usage" href="usage.html"/>
       <item name="FAQ" href="faq.html"/>
       <!-- According to https://issues.apache.org/jira/browse/MNGSITE-152 -->
-      <item name="License" href="http://www.apache.org/licenses/"/>
+      <item name="License" href="https://www.apache.org/licenses/"/>
       <item name="Download" href="download.html"/>
     </menu>
     <menu name="Configuration">
@@ -65,6 +41,7 @@ under the License.
       <item name="Filtering EAR Resources" href="examples/filtering-sources.html"/>
       <item name="Advanced Filtering Techniques" href="examples/filtering-advanced.html"/>
       <item name="Creating Skinny WARs" href="examples/skinny-wars.html"/>
+      <item name="Creating Skinny Modules" href="examples/skinny-modules.html"/>
       <item name="Customizing A Module Filename" href="examples/customizing-a-module-filename.html"/>
       <item name="Customizing The Context Root" href="examples/customizing-context-root.html"/>
       <item name="Customizing A Module Location" href="examples/customizing-module-location.html"/>

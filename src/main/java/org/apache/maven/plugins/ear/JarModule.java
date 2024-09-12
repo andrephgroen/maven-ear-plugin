@@ -28,9 +28,9 @@ import java.util.Set;
 /**
  * The {@link EarModule} implementation for a non J2EE module such as third party libraries.
  *
- * <p>Such module is not incorporated in the generated <tt>application.xml</tt>
+ * <p>Such module is not incorporated in the generated {@code application.xml}
  * but some application servers support it. To include it in the generated
- * deployment descriptor anyway, set the <tt>includeInApplicationXml</tt> boolean flag.
+ * deployment descriptor anyway, set the {@code includeInApplicationXml} boolean flag.
  * </p>
  * 
  * @author <a href="snicoll@apache.org">Stephane Nicoll</a>
@@ -38,6 +38,11 @@ import java.util.Set;
 public class JarModule
     extends AbstractEarModule
 {
+    /**
+     * Default type of the artifact of a non Java EE module such as third party library.
+     */
+    public static final String DEFAULT_ARTIFACT_TYPE = "jar";
+
     private Boolean includeInApplicationXml = Boolean.FALSE;
 
     /**
@@ -45,7 +50,8 @@ public class JarModule
      */
     public JarModule()
     {
-        super();
+        this.type = DEFAULT_ARTIFACT_TYPE;
+        this.classPathItem = true;
     }
 
     /**
@@ -58,7 +64,7 @@ public class JarModule
         super( a );
         setLibBundleDir( defaultLibBundleDir );
         this.includeInApplicationXml = includeInApplicationXml;
-
+        this.classPathItem = true;
     }
 
     /**
@@ -93,14 +99,6 @@ public class JarModule
         // If the defaultLibBundleDir is set and no bundle dir is
         // set, set the default as bundle dir
         setLibBundleDir( earExecutionContext.getDefaultLibBundleDir() );
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public String getType()
-    {
-        return "jar";
     }
 
     private void setLibBundleDir( String defaultLibBundleDir )

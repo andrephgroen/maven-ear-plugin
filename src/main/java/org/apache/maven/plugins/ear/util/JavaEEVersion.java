@@ -43,7 +43,11 @@ public class JavaEEVersion
     
     private static final String VERSION_8 = "8";
 
-    private static final Map<String, JavaEEVersion> VERSION_MAP = new HashMap<String, JavaEEVersion>();
+    private static final String VERSION_9 = "9";
+
+    private static final String VERSION_10 = "10";
+
+    private static final Map<String, JavaEEVersion> VERSION_MAP = new HashMap<>();
 
     /**
      * Represents the J2EE 1.3 version.
@@ -74,6 +78,16 @@ public class JavaEEVersion
      * Represents the JavaEE 8 version.
      */
     public static final JavaEEVersion EIGHT = new JavaEEVersion( Integer.valueOf( 5 ), VERSION_8 );
+
+    /**
+     * Represents the JakartaEE 9 version.
+     */
+    public static final JavaEEVersion NINE = new JavaEEVersion( Integer.valueOf( 6 ), VERSION_9 );
+
+    /**
+     * Represents the JakartaEE 10 version.
+     */
+    public static final JavaEEVersion TEN = new JavaEEVersion( Integer.valueOf( 7 ), VERSION_10 );
 
     private final Integer index;
 
@@ -114,19 +128,19 @@ public class JavaEEVersion
     /**
      * Specifies if this version is greater or equal to the specified version.
      * 
-     * @param parmVersion the version to check
-     * @return true if this version is greater or equal to <tt>version</tt>
+     * @param paramVersion the version to check
+     * @return true if this version is greater or equal to {@code version}
      */
-    public boolean ge( JavaEEVersion parmVersion )
+    public boolean ge( JavaEEVersion paramVersion )
     {
-        return this.compareTo( parmVersion ) >= 0;
+        return this.compareTo( paramVersion ) >= 0;
     }
 
     /**
      * Specifies if this version is greater than the specified version.
      * 
      * @param paramVersion the version to check
-     * @return true if this version is greater to <tt>version</tt>
+     * @return true if this version is greater to {@code version}
      */
     public boolean gt( JavaEEVersion paramVersion )
     {
@@ -137,7 +151,7 @@ public class JavaEEVersion
      * Specifies if this version is equal to the specified version.
      * 
      * @param paramVersion the version to check
-     * @return true if this version is equal to <tt>version</tt>
+     * @return true if this version is equal to {@code version}
      */
     public boolean eq( JavaEEVersion paramVersion )
     {
@@ -148,7 +162,7 @@ public class JavaEEVersion
      * Specifies if this version is less or equal to the specified version.
      * 
      * @param paramVersion the version to check
-     * @return true if this version is less or equal to <tt>version</tt>
+     * @return true if this version is less or equal to {@code version}
      */
     public boolean le( JavaEEVersion paramVersion )
     {
@@ -159,7 +173,7 @@ public class JavaEEVersion
      * Specifies if this version is less than the specified version.
      * 
      * @param paramVersion the version to check
-     * @return true if this version is less or equal to <tt>version</tt>
+     * @return true if this version is less or equal to {@code version}
      */
     public boolean lt( JavaEEVersion paramVersion )
     {
@@ -170,13 +184,13 @@ public class JavaEEVersion
      * Checks if the specified version string is valid.
      * 
      * @param paramVersion the version string to check
-     * @return <tt>true</tt> if the version is valid
+     * @return {@code true} if the version is valid
      */
     private static boolean isValid( String paramVersion )
     {
         if ( paramVersion == null )
         {
-            throw new IllegalArgumentException( "version could not be null." );
+            throw new NullPointerException( "version cannot be null." );
         }
         // @formatter:off
         return VERSION_1_3.equals( paramVersion ) 
@@ -184,7 +198,9 @@ public class JavaEEVersion
             || VERSION_5.equals( paramVersion ) 
             || VERSION_6.equals( paramVersion ) 
             || VERSION_7.equals( paramVersion )
-            || VERSION_8.equals( paramVersion );
+            || VERSION_8.equals( paramVersion )
+            || VERSION_9.equals( paramVersion )
+            || VERSION_10.equals( paramVersion );
         // @formatter:on
     }
 
@@ -193,7 +209,7 @@ public class JavaEEVersion
     {
         if ( otherVersion == null )
         {
-            throw new IllegalArgumentException( "other object to compare to could not be null." );
+            throw new NullPointerException( "other object to compare to could not be null." );
         }
         return index.compareTo( otherVersion.index );
     }
